@@ -35,6 +35,8 @@ function connectSocket() {
     ws = new WebSocket("wss://rypo8sd6h9.execute-api.us-east-1.amazonaws.com/prod?room=" + roomCode);
 
     ws.onmessage = async e => {
+        const data = JSON.parse(e.data);
+
         if (data.presignUrl && pendingFile) {
             await fetch(data.presignUrl, {
                 method: "PUT",
@@ -46,7 +48,7 @@ function connectSocket() {
                 sender: alias,
                 name: pendingFile.name,
                 iv: pendingFile.iv,
-                key: pendingFile.fileKey,
+                key: pendingFile.key,
                 url: data.fileUrl
             };
 
@@ -57,7 +59,6 @@ function connectSocket() {
             return;
         }
 
-        const data = JSON.parse(e.data);
         if (data.type === "rotate") {
             const decrypted = await decryptText(roomKey, data.ciphertext, data.iv);
             const raw = base64ToBytes(decrypted);
@@ -70,10 +71,6 @@ function connectSocket() {
                 ["encrypt", "decrypt"]
             );
             return;
-        }
-
-        if (data.url) {
-            fetch(data.url, { method: "PUT", body: enc.blob });
         }
 
         if (data.type === "system") {
@@ -92,37 +89,13 @@ function connectSocket() {
             return;
         }
 
+        if (!data.ciphertext) return;
+
         const decrypted = await decryptText(roomKey, data.ciphertext, data.iv);
         const payload = JSON.parse(decrypted);
         appendMessage(payload.sender, payload.text, false);
+
     };
-}
-
-function appendMessage(sender, text, mine) {
-    const box = document.getElementById("messages");
-    const wrap = document.createElement("div");
-    wrap.className = mine ? "msg mine" : "msg theirs";
-
-    const name = document.createElement("div");
-    name.className = "alias";
-    name.innerText = sender;
-
-    const bubble = document.createElement("div");
-    bubble.className = "bubble";
-    bubble.innerText = text;
-
-    wrap.appendChild(name);
-    wrap.appendChild(bubble);
-    box.appendChild(wrap);
-    box.scrollTop = box.scrollHeight;
-}
-
-function addSystemMessage(text) {
-    const box = document.getElementById("messages");
-    const div = document.createElement("div");
-    div.className = "text-center text-gray-500 text-xs my-3";
-    div.innerText = "— " + text + " —";
-    box.appendChild(div);
 }
 
 async function sendMessage() {
@@ -167,9 +140,10 @@ async function encryptFile(file) {
     return {
         blob: new Blob([encrypted]),
         iv: bytesToBase64(iv),
-        fileKey: encKey,
+        key: encKey,
         name: file.name
     };
+
 }
 
 
